@@ -15,6 +15,7 @@
 #include "dwl-bar-ipc-unstable-v1-protocol.h"
 #include "xdg-output-unstable-v1-protocol.h"
 
+#define VERSION 1.0
 #define EQUAL 0
 #define ERROR -1
 #define POLLFDS 1
@@ -165,45 +166,48 @@ struct Monitor *get_active_monitor(void) {
 void monitor_output(struct Monitor *monitor, int tagmask) {
     int i;
 
-    if (noun & Active_Tag && !tagmask)
-        tagmask = get_active_tags(monitor);
+    if (!verb)
+        return;
 
-    printf("%s: ", monitor->xdg_name);
+    if ((noun & Outputs || noun & Active_Output || noun & Noun_All) && (verb & State || verb & Appid || verb & Title || verb & Layout || verb & Verb_All)) {
+        printf("%s: ", monitor->xdg_name);
 
-    if (verb & State || verb & Verb_All)
-        printf("%s", monitor->active ? "Active " : "InActive ");
+        if (verb & State || verb & Verb_All)
+            printf("%s", monitor->active ? "Active " : "InActive ");
 
-    if (verb & Title || verb & Verb_All) {
-        printf("'%s' ", monitor->title);
+        if (verb & Title || verb & Verb_All) {
+            printf("'%s' ", monitor->title);
+        }
+
+        if (verb & Appid || verb & Verb_All) {
+            printf("'%s' ", monitor->appid);
+        }
+
+        if (verb & Layout || verb & Verb_All)
+            printf("%s ", *WL_ARRAY_AT(&layouts, char**, monitor->layout_index));
+
+        printf("\n");
     }
 
-    if (verb & Appid || verb & Verb_All) {
-        printf("'%s' ", monitor->appid);
-    }
-
-    if (verb & Layout || verb & Verb_All)
-        printf("%s ", *WL_ARRAY_AT(&layouts, char**, monitor->layout_index));
-
-    printf("\n");
-
-    if (noun & Tags && (!(verb & State) && !(verb & Focused) && !(verb & Clients) && !(verb & Verb_All))) {
-        print_wl_array(&tags);
+    if (!tagmask && !(noun & Active_Tag) && !(noun & Tags) && !(noun & Noun_All)) {
         return;
     }
 
-    if (noun & Noun_All || (noun & Tags && !tagmask)) {
+    if (noun & Active_Tag)
+        tagmask = get_active_tags(monitor);
+
+
+    if (noun & Noun_All || noun & Tags) {
         tagmask = 0;
         for (i = 0; i < WL_ARRAY_LENGHT(&tags, char**); i++)
             tagmask |= 1 << i;
-    } else if (!(noun & Noun_All) && !tagmask ) {
-        return;
     }
 
     for (i = 0; i < WL_ARRAY_LENGHT(&tags, char**); i++) {
-        printf("%s: %d: ", monitor->xdg_name, i+1);
-
-        if (!(tagmask & (1 << i)))
+        if (!(tagmask & (1 << i)) || !(verb & Focused || verb & Clients || verb & Verb_All || verb & State))
             continue;
+
+        printf("%s: %d: ", monitor->xdg_name, i+1);
 
         struct Tag *tag = &monitor->tags[i];
 
@@ -215,7 +219,7 @@ void monitor_output(struct Monitor *monitor, int tagmask) {
         if (verb & Focused || verb & Verb_All)
             printf("%d ", tag->is_focused);
 
-        if (verb & Focused || verb & Verb_All)
+        if (verb & Clients || verb & Verb_All)
             printf("%d", tag->client_amount);
 
         printf("\n");
@@ -332,7 +336,7 @@ void global_add(void *data, struct wl_registry *registry, uint32_t name, const c
         return;
     }
     if (strcmp(interface, zdwl_manager_v1_interface.name) == EQUAL) {
-        dwl_manager = wl_registry_bind(registry, name, &zdwl_manager_v1_interface, 1);
+        dwl_manager = wl_registry_bind(registry, name, &zdwl_manager_v1_interface, 2);
         zdwl_manager_v1_add_listener(dwl_manager, &dwl_manager_listener, NULL);
         return;
     }
@@ -352,6 +356,7 @@ void monitor_setup(uint32_t registry_name, struct wl_output* output) {
     monitor->active = 0;
     monitor->layout_index = 0;
     monitor->title = NULL;
+    monitor->appid = NULL;
 
     zxdg_output_v1_add_listener(zxdg_output_manager_v1_get_xdg_output(output_manager, output), 
                                 &xdg_output_listener, 
@@ -412,15 +417,18 @@ void setup(void) {
 }
 
 int main(int argc, char *argv[]) {
-    setup();
-    
     int i, opt = 0, tagmask = 0;
     char *wanted_monitor = NULL;
     struct Monitor *monitor;
 
+    setup();
+    
     while(opt != -1)  {
-        opt = getopt(argc, argv, "ho:Ot:TeEaAsilLfcp");
+        opt = getopt(argc, argv, "vho:Ot:TeEaAsilLfcp");
         switch (opt) {
+            case 'v':
+                printf("dwl-state %f\n", VERSION);
+                goto done;
             case 'h':
                 goto usage;
             case 'L':
@@ -433,12 +441,13 @@ int main(int argc, char *argv[]) {
                 noun |= Noun_All;
                 break;
             case 't':
-                noun |= Tags;
+                if (!(noun & Tags))
+                    noun |= Tags;
 
                 int tag = atoi(optarg);
                 if (!tag || tag < 1 || tag > WL_ARRAY_LENGHT(&tags, char**))
                     die("%s is not a valid number or index", optarg);
-                tagmask |= 1 << tag;
+                tagmask |= 1 << (tag-1);
 
                 break;
             case 'T':
@@ -488,7 +497,7 @@ int main(int argc, char *argv[]) {
 
     if (!noun && !verb)
         goto done;
-    
+
     if (noun & Outputs && !verb) {
         wl_list_for_each(monitor, &monitors, link) {
             printf("%s ", monitor->xdg_name);
@@ -502,8 +511,23 @@ int main(int argc, char *argv[]) {
         goto done;
     }
 
-    if ((noun & Active_Output || !noun) && !wanted_monitor)
+    if ((noun & Tags || noun & Active_Tag) && !(verb & Focused || verb & Clients || verb & Verb_All))
+        goto done;
+
+    if ((noun & Outputs || noun & Active_Output) && !(verb & State || verb & Appid || verb & Title || verb & Layout || verb & Verb_All)) {
+        goto done;
+    }
+
+    if ((!(noun & Tags) && !(noun & Active_Tag)) && (verb & Focused || verb & Clients)) {
+        noun |= Active_Tag;
+    }
+
+    if ((!(noun & Outputs) && !wanted_monitor) || noun & Active_Output) {
+        if (verb & State || verb & Appid || verb & Title || verb & Layout)
+            noun |= Outputs;
+
         wanted_monitor = get_active_monitor()->xdg_name;
+    }
 
     if (noun & Noun_All || (noun & Outputs && !wanted_monitor)) {
         wl_list_for_each(monitor, &monitors, link) {
@@ -518,6 +542,8 @@ int main(int argc, char *argv[]) {
 
 usage:
     printf("Usage: %s [-option args]\n", argv[0]);
+    printf("-h               -- Print this message.\n");
+    printf("-v               -- Print the version and exit.\n");
     printf("--     Nouns     --\n");
     printf("-t [tag index]   -- Filter to a specific tag based on index.\n");
     printf("-T               -- Filter to all tags for an output.\n");
@@ -531,7 +557,7 @@ usage:
     printf("--  Global Verbs --\n");
     printf("-L               -- Print available layout names.\n");
     printf("-s               -- Print the state of the object, tags if specified, output if no tags.\n");
-    printf("-e               -- Print all information about a specified object, if no objects like tags or outputs specifed then print everything\n");
+    printf("-e               -- Print all information about a specified object, if no objects like tags or outputs specifed then print everything.\n");
     printf("--  Output Verbs --\n");
     printf("-p               -- Get the appid of an output, if none specified get the active output.\n");
     printf("-i               -- Get the title of an output, if none specified get the active output.\n");

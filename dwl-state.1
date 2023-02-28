@@ -1,0 +1,68 @@
+.TH dwl-state 1
+.SH NAME
+dwl-state \- Command-line tool to retrieve dwl state.
+.SH SYNOPSIS
+.B dwl-state
+.RB [\-vhoOtTeEaAsilLfcp]
+.SH DESCRIPTION
+dwl-state is a comand-line tool to retrieve the state of dwl using the ipc protocol.
+.SH OPTIONS
+.TP
+.B \-v 
+Print the version and exit.
+.TP
+.B \-h
+Print this message.
+.SS Nouns
+.TP
+.B \-t [tag index]
+Filter to a specific tag based on index.
+.TP
+.B \-T
+Filter to all tags for an output.
+.TP
+.B \-o [output name]
+Filter to a specific output based on name.
+.TP
+.B \-O
+Filter to all outputs, use along to print output names. Use with no verbs to print monitor names.
+.TP
+.B \-a
+Filter to the active output.
+.TP
+.B \-A
+Filter to the active tag.
+.TP
+.B \-E
+Filter to all outputs and all tags same as -O and -T.
+.SS Global Verbs
+.TP
+.B \-L
+Print available layout names.
+.TP
+.B \-s
+Print the state of the object, tags if specified, output if no tags.
+.TP
+.B \-e
+Print all information about a specified object, if no objects like tags or outputs specifed then print everything.
+.SS Output Verbs
+.TP
+.B \-p
+Get the appid of an output, if none specified get the active output.
+.TP
+.B \-i
+Get the title of an output, if none specified get the active output.
+.TP
+.B \-l
+Get the current layout of an output, if none specified get the active output.
+.SS Tag Verbs
+.TP
+.B \-f
+Get the focused state of a specifed tag, if none specified get the active tag.
+.TP
+.B \-c
+Get the client amount of a specified tag, if none specified get the active tag.
+.SH SEE ALSO
+.BR dwl (1)
+.SH BUGS
+Please open an issue at https://github.com/MacowOG/dwl-bar if you encounter any bugs.
