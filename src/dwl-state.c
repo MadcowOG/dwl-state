@@ -60,15 +60,16 @@ enum Verb {
     // Global
     Verb_All  = 1 << 1,
     State     = 1 << 2,
-    
+    No_Labels = 1 << 3,
+
     // Output specific
-    Title     = 1 << 3,
-    Appid     = 1 << 4,
-    Layout    = 1 << 5,
+    Title     = 1 << 4,
+    Appid     = 1 << 5,
+    Layout    = 1 << 6,
 
     // Tag specific
-    Focused   = 1 << 6,
-    Clients   = 1 << 7,
+    Focused   = 1 << 7,
+    Clients   = 1 << 8,
 };
 
 /* Functions */
@@ -103,7 +104,7 @@ static struct zdwl_manager_v1* dwl_manager;
 static struct wl_list monitors;
 static struct pollfd *pollfds;
 static struct zxdg_output_manager_v1* output_manager;
-static struct wl_array tags, 
+static struct wl_array tags,
                        layouts;
 static int noun = 0,
            verb = 0;
@@ -121,7 +122,7 @@ static const struct zdwl_output_v1_listener dwl_output_listener = {
     .frame = dwl_output_frame,
     .active = dwl_output_active,
     .toggle_visibility = dwl_output_toggle_visibility,
-    .appid = dwl_output_appid, 
+    .appid = dwl_output_appid,
 };
 
 static const struct wl_registry_listener registry_listener = {
@@ -170,7 +171,8 @@ void monitor_output(struct Monitor *monitor, int tagmask) {
         return;
 
     if ((noun & Outputs || noun & Active_Output || noun & Noun_All) && (verb & State || verb & Appid || verb & Title || verb & Layout || verb & Verb_All)) {
-        printf("%s: ", monitor->xdg_name);
+        if (!(verb & No_Labels))
+            printf("%s: ", monitor->xdg_name);
 
         if (verb & State || verb & Verb_All)
             printf("%s", monitor->active ? "Active " : "InActive ");
@@ -207,12 +209,13 @@ void monitor_output(struct Monitor *monitor, int tagmask) {
         if (!(tagmask & (1 << i)) || !(verb & Focused || verb & Clients || verb & Verb_All || verb & State))
             continue;
 
-        printf("%s: %d: ", monitor->xdg_name, i+1);
+        if (!(verb & No_Labels))
+            printf("%s: %d: ", monitor->xdg_name, i+1);
 
         struct Tag *tag = &monitor->tags[i];
 
         if (verb & State || verb & Verb_All)
-            printf("%s %s", 
+            printf("%s %s",
                     tag->state & ZDWL_OUTPUT_V1_TAG_STATE_ACTIVE ? "Active" : "InActive",
                     tag->state & ZDWL_OUTPUT_V1_TAG_STATE_URGENT ? "Urgent "  : "");
 
@@ -237,13 +240,13 @@ int check_for_framed(char *name) {
                 return 0;
             framed = 1;
             continue;
-        } 
+        }
 
         if (strcmp(monitor->xdg_name, name) == EQUAL && monitor->framed) {
             return 1;
         }
     }
-    
+
     return framed;
 }
 
@@ -358,8 +361,8 @@ void monitor_setup(uint32_t registry_name, struct wl_output* output) {
     monitor->title = NULL;
     monitor->appid = NULL;
 
-    zxdg_output_v1_add_listener(zxdg_output_manager_v1_get_xdg_output(output_manager, output), 
-                                &xdg_output_listener, 
+    zxdg_output_v1_add_listener(zxdg_output_manager_v1_get_xdg_output(output_manager, output),
+                                &xdg_output_listener,
                                 monitor);
 
     wl_list_insert(&monitors, &monitor->link);
@@ -393,7 +396,7 @@ void setup(void) {
 
     struct Monitor *monitor;
     wl_list_for_each(monitor, &monitors, link) {
-        /* 
+        /*
          * We must initialize tags before we add dwl_output listener.
          */
         struct Tag *monitor_tags = ecalloc(WL_ARRAY_LENGHT(&tags, char**), sizeof(*monitor_tags));
@@ -422,9 +425,9 @@ int main(int argc, char *argv[]) {
     struct Monitor *monitor;
 
     setup();
-    
+
     while(opt != -1)  {
-        opt = getopt(argc, argv, "vho:Ot:TeEaAsilLfcp");
+        opt = getopt(argc, argv, "vho:Ot:TeEaAsilLfcpn");
         switch (opt) {
             case 'v':
                 printf("dwl-state %f\n", VERSION);
@@ -465,7 +468,7 @@ int main(int argc, char *argv[]) {
                 noun |= Outputs;
                 break;
             case 'a':
-                noun |= Active_Output; 
+                noun |= Active_Output;
                 break;
             case 'A':
                 noun |= Active_Tag;
@@ -487,6 +490,9 @@ int main(int argc, char *argv[]) {
                 break;
             case 'p':
                 verb |= Appid;
+                break;
+            case 'n':
+                verb |= No_Labels;
                 break;
             case ':':
                 goto usage;
@@ -558,6 +564,7 @@ usage:
     printf("-L               -- Print available layout names.\n");
     printf("-s               -- Print the state of the object, tags if specified, output if no tags.\n");
     printf("-e               -- Print all information about a specified object, if no objects like tags or outputs specifed then print everything.\n");
+    printf("-n               -- Print information with out labels.\n");
     printf("--  Output Verbs --\n");
     printf("-p               -- Get the appid of an output, if none specified get the active output.\n");
     printf("-i               -- Get the title of an output, if none specified get the active output.\n");
@@ -574,7 +581,7 @@ done:
 }
 
 void cleanup(void) {
-    struct Monitor *monitor, *tmp; 
+    struct Monitor *monitor, *tmp;
     wl_list_for_each_safe(monitor, tmp, &monitors, link) {
         monitor_cleanup(monitor);
     }
