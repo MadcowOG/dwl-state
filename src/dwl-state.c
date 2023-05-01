@@ -12,7 +12,7 @@
 #include <wayland-client.h>
 #include <wayland-util.h>
 
-#include "dwl-ipc-unstable-v1-protocol.h"
+#include "dwl-ipc-unstable-v2-protocol.h"
 #include "xdg-output-unstable-v1-protocol.h"
 
 #define VERSION 1.0
@@ -24,7 +24,7 @@
 
 /* Structures */
 struct Tag {
-    uint state; /* zdwl_ipc_output_v1_tag_state */
+    uint state; /* zdwl_ipc_output_v2_tag_state */
     uint client_amount;
     uint is_focused;
 };
@@ -34,12 +34,13 @@ struct Monitor {
     int32_t registry_name;
     struct wl_list link;
     struct wl_output *wl_output;
-    struct zdwl_ipc_output_v1 *dwl_output;
+    struct zdwl_ipc_output_v2 *dwl_output;
     struct Tag *tags;
 
     int framed;
     int active;
     int layout_index;
+    char *layout_symbol;
     char* title;
     char* appid;
 };
@@ -58,18 +59,19 @@ enum Verb {
     Verb_None = 0,
 
     // Global
-    Verb_All  = 1 << 1,
-    State     = 1 << 2,
-    No_Labels = 1 << 3,
+    Verb_All      = 1 << 1,
+    State         = 1 << 2,
+    No_Labels     = 1 << 3,
 
     // Output specific
-    Title     = 1 << 4,
-    Appid     = 1 << 5,
-    Layout    = 1 << 6,
+    Title         = 1 << 4,
+    Appid         = 1 << 5,
+    Layout        = 1 << 6,
+    Layout_Symbol = 1 << 7,
 
     // Tag specific
-    Focused   = 1 << 7,
-    Clients   = 1 << 8,
+    Focused       = 1 << 8,
+    Clients       = 1 << 9,
 };
 
 /* Functions */
@@ -77,15 +79,16 @@ static void cleanup(void);
 static void check_global(void* global, const char *msg);
 static int  check_for_framed(char *name);
 static void die(const char* fmt, ...);
-static void dwl_manager_tag(void *data, struct zdwl_ipc_manager_v1 *zdwl_ipc_manager_v1, const char *name);
-static void dwl_manager_layout(void *data, struct zdwl_ipc_manager_v1 *zdwl_ipc_manager_v1, const char *name);
-static void dwl_output_active(void *data, struct zdwl_ipc_output_v1 *zdwl_ipc_output_v1, uint32_t active);
-static void dwl_output_frame(void *data, struct zdwl_ipc_output_v1 *zdwl_ipc_output_v1);
-static void dwl_output_layout(void *data, struct zdwl_ipc_output_v1 *zdwl_ipc_output_v1, uint32_t layout);
-static void dwl_output_tag(void *data, struct zdwl_ipc_output_v1 *zdwl_ipc_output_v1, uint32_t index, uint32_t state, uint32_t clients, uint32_t focused);
-static void dwl_output_title(void *data, struct zdwl_ipc_output_v1 *zdwl_ipc_output_v1, const char *title);
-static void dwl_output_appid(void *data, struct zdwl_ipc_output_v1 *zdwl_ipc_output_v1, const char *appid);
-static void dwl_output_toggle_visibility(void *data, struct zdwl_ipc_output_v1 *zdwl_ipc_output_v1) {/* Do Nothing */}
+static void dwl_manager_tag(void *data, struct zdwl_ipc_manager_v2 *zdwl_ipc_manager_v2, uint32_t tagcount);
+static void dwl_manager_layout(void *data, struct zdwl_ipc_manager_v2 *zdwl_ipc_manager_v2, const char *name);
+static void dwl_output_active(void *data, struct zdwl_ipc_output_v2 *zdwl_ipc_output_v2, uint32_t active);
+static void dwl_output_frame(void *data, struct zdwl_ipc_output_v2 *zdwl_ipc_output_v2);
+static void dwl_output_layout(void *data, struct zdwl_ipc_output_v2 *zdwl_ipc_output_v2, uint32_t layout);
+static void dwl_output_layout_symbol(void *data, struct zdwl_ipc_output_v2 *zdwl_ipc_output_v2, const char *layout_symbol);
+static void dwl_output_tag(void *data, struct zdwl_ipc_output_v2 *zdwl_ipc_output_v2, uint32_t index, uint32_t state, uint32_t clients, uint32_t focused);
+static void dwl_output_title(void *data, struct zdwl_ipc_output_v2 *zdwl_ipc_output_v2, const char *title);
+static void dwl_output_appid(void *data, struct zdwl_ipc_output_v2 *zdwl_ipc_output_v2, const char *appid);
+static void dwl_output_toggle_visibility(void *data, struct zdwl_ipc_output_v2 *zdwl_ipc_output_v2) {/* Do Nothing */}
 static void *ecalloc(size_t amount, size_t size);
 static struct Monitor *get_monitor_from_name(char *name);
 static void global_add(void *data, struct wl_registry *registry, uint32_t name, const char *interface, uint32_t version);
@@ -100,24 +103,25 @@ static void xdg_name(void* data, struct zxdg_output_v1* xdg_output, const char* 
 /* Variables */
 static struct wl_display *display;
 static int display_fd;
-static struct zdwl_ipc_manager_v1* dwl_manager;
+static struct zdwl_ipc_manager_v2* dwl_manager;
 static struct wl_list monitors;
 static struct pollfd *pollfds;
 static struct zxdg_output_manager_v1* output_manager;
-static struct wl_array tags,
-                       layouts;
+static struct wl_array layouts;
+static int tagcount;
 static int noun = 0,
            verb = 0;
 
 /* Listeners */
-static const struct zdwl_ipc_manager_v1_listener dwl_manager_listener = {
-    .tag = dwl_manager_tag,
+static const struct zdwl_ipc_manager_v2_listener dwl_manager_listener = {
+    .tags = dwl_manager_tag,
     .layout = dwl_manager_layout,
 };
 
-static const struct zdwl_ipc_output_v1_listener dwl_output_listener = {
+static const struct zdwl_ipc_output_v2_listener dwl_output_listener = {
     .tag = dwl_output_tag,
     .layout = dwl_output_layout,
+    .layout_symbol = dwl_output_layout_symbol,
     .title = dwl_output_title,
     .frame = dwl_output_frame,
     .active = dwl_output_active,
@@ -135,7 +139,7 @@ static const struct zxdg_output_v1_listener xdg_output_listener = {
     .name = xdg_name,
 };
 
-void dwl_output_appid(void *data, struct zdwl_ipc_output_v1 *zdwl_ipc_output_v1, const char *appid) {
+void dwl_output_appid(void *data, struct zdwl_ipc_output_v2 *zdwl_ipc_output_v2, const char *appid) {
     struct Monitor *monitor = data;
     if (monitor->appid)
         free(monitor->appid);
@@ -145,9 +149,9 @@ void dwl_output_appid(void *data, struct zdwl_ipc_output_v1 *zdwl_ipc_output_v1,
 
 int get_active_tags(struct Monitor *monitor) {
     int tagmask = 0;
-    for (int i = 0; i < WL_ARRAY_LENGHT(&tags, char**); i++) {
+    for (int i = 0; i < tagcount; i++) {
         struct Tag *tag = &monitor->tags[i];
-        if (tag->state & ZDWL_IPC_OUTPUT_V1_TAG_STATE_ACTIVE)
+        if (tag->state & ZDWL_IPC_OUTPUT_V2_TAG_STATE_ACTIVE)
             tagmask |= 1 << i;
     }
 
@@ -170,7 +174,7 @@ void monitor_output(struct Monitor *monitor, int tagmask) {
     if (!verb)
         return;
 
-    if ((noun & Outputs || noun & Active_Output || noun & Noun_All) && (verb & State || verb & Appid || verb & Title || verb & Layout || verb & Verb_All)) {
+    if ((noun & Outputs || noun & Active_Output || noun & Noun_All) && (verb & State || verb & Appid || verb & Title || verb & Layout || verb & Layout_Symbol || verb & Verb_All)) {
         if (!(verb & No_Labels))
             printf("%s: ", monitor->xdg_name);
 
@@ -188,6 +192,9 @@ void monitor_output(struct Monitor *monitor, int tagmask) {
         if (verb & Layout || verb & Verb_All)
             printf("%s ", *WL_ARRAY_AT(&layouts, char**, monitor->layout_index));
 
+        if (verb & Layout_Symbol || verb & Verb_All)
+            printf("%s ", monitor->layout_symbol);
+
         printf("\n");
     }
 
@@ -201,11 +208,11 @@ void monitor_output(struct Monitor *monitor, int tagmask) {
 
     if (noun & Noun_All || noun & Tags) {
         tagmask = 0;
-        for (i = 0; i < WL_ARRAY_LENGHT(&tags, char**); i++)
+        for (i = 0; i < tagcount; i++)
             tagmask |= 1 << i;
     }
 
-    for (i = 0; i < WL_ARRAY_LENGHT(&tags, char**); i++) {
+    for (i = 0; i < tagcount; i++) {
         if (!(tagmask & (1 << i)) || !(verb & Focused || verb & Clients || verb & Verb_All || verb & State))
             continue;
 
@@ -216,8 +223,8 @@ void monitor_output(struct Monitor *monitor, int tagmask) {
 
         if (verb & State || verb & Verb_All)
             printf("%s %s",
-                    tag->state & ZDWL_IPC_OUTPUT_V1_TAG_STATE_ACTIVE ? "Active" : "InActive",
-                    tag->state & ZDWL_IPC_OUTPUT_V1_TAG_STATE_URGENT ? "Urgent "  : "");
+                    tag->state & ZDWL_IPC_OUTPUT_V2_TAG_STATE_ACTIVE ? "Active" : "InActive",
+                    tag->state & ZDWL_IPC_OUTPUT_V2_TAG_STATE_URGENT ? "Urgent "  : "");
 
         if (verb & Focused || verb & Verb_All)
             printf("%d ", tag->is_focused);
@@ -280,12 +287,12 @@ void xdg_name(void* data, struct zxdg_output_v1* xdg_output, const char* name) {
     zxdg_output_v1_destroy(xdg_output);
 }
 
-void dwl_output_active(void *data, struct zdwl_ipc_output_v1 *zdwl_ipc_output_v1, uint32_t active) {
+void dwl_output_active(void *data, struct zdwl_ipc_output_v2 *zdwl_ipc_output_v2, uint32_t active) {
     struct Monitor* monitor = data;
     monitor->active = active;
 }
 
-void dwl_output_tag(void *data, struct zdwl_ipc_output_v1 *zdwl_ipc_output_v1, uint32_t index, uint32_t state, uint32_t clients, uint32_t focused) {
+void dwl_output_tag(void *data, struct zdwl_ipc_output_v2 *zdwl_ipc_output_v2, uint32_t index, uint32_t state, uint32_t clients, uint32_t focused) {
     struct Monitor *monitor = data;
     struct Tag *tag         = &monitor->tags[index];
 
@@ -294,12 +301,17 @@ void dwl_output_tag(void *data, struct zdwl_ipc_output_v1 *zdwl_ipc_output_v1, u
     tag->is_focused = focused;
 }
 
-void dwl_output_layout(void *data, struct zdwl_ipc_output_v1 *zdwl_ipc_output_v1, uint32_t layout) {
+void dwl_output_layout(void *data, struct zdwl_ipc_output_v2 *zdwl_ipc_output_v2, uint32_t layout) {
     struct Monitor *monitor = data;
     monitor->layout_index=layout;
 }
 
-void dwl_output_title(void *data, struct zdwl_ipc_output_v1 *zdwl_ipc_output_v1, const char *title) {
+void dwl_output_layout_symbol(void *data, struct zdwl_ipc_output_v2 *zdwl_ipc_output_v2, const char *layout_symbol) {
+    struct Monitor *monitor = data;
+    monitor->layout_symbol = strdup(layout_symbol);
+}
+
+void dwl_output_title(void *data, struct zdwl_ipc_output_v2 *zdwl_ipc_output_v2, const char *title) {
     struct Monitor *monitor = data;
     if (monitor->title)
         free(monitor->title);
@@ -307,22 +319,16 @@ void dwl_output_title(void *data, struct zdwl_ipc_output_v1 *zdwl_ipc_output_v1,
     monitor->title = strdup(title);
 }
 
-void dwl_output_frame(void *data, struct zdwl_ipc_output_v1 *zdwl_ipc_output_v1) {
+void dwl_output_frame(void *data, struct zdwl_ipc_output_v2 *zdwl_ipc_output_v2) {
     struct Monitor *monitor = data;
     monitor->framed = 1;
 }
 
-void dwl_manager_tag(void *data, struct zdwl_ipc_manager_v1 *zdwl_ipc_manager_v1, const char *name) {
-    char** ptr = wl_array_add(&tags, sizeof(char**));
-    if (!ptr)
-        return;
-
-    char* dup = strdup(name);
-
-    memcpy(ptr, &dup, sizeof(char**));
+void dwl_manager_tag(void *data, struct zdwl_ipc_manager_v2 *zdwl_ipc_manager_v2, uint32_t tags) {
+    tagcount = tags;
 }
 
-void dwl_manager_layout(void *data, struct zdwl_ipc_manager_v1 *zdwl_ipc_manager_v1, const char *name) {
+void dwl_manager_layout(void *data, struct zdwl_ipc_manager_v2 *zdwl_ipc_manager_v2, const char *name) {
     char** ptr = wl_array_add(&layouts, sizeof(char**));
     if (!ptr)
         return;
@@ -338,9 +344,9 @@ void global_add(void *data, struct wl_registry *registry, uint32_t name, const c
         monitor_setup(name, output);
         return;
     }
-    if (strcmp(interface, zdwl_ipc_manager_v1_interface.name) == EQUAL) {
-        dwl_manager = wl_registry_bind(registry, name, &zdwl_ipc_manager_v1_interface, 2);
-        zdwl_ipc_manager_v1_add_listener(dwl_manager, &dwl_manager_listener, NULL);
+    if (strcmp(interface, zdwl_ipc_manager_v2_interface.name) == EQUAL) {
+        dwl_manager = wl_registry_bind(registry, name, &zdwl_ipc_manager_v2_interface, 1);
+        zdwl_ipc_manager_v2_add_listener(dwl_manager, &dwl_manager_listener, NULL);
         return;
     }
     if (strcmp(interface, zxdg_output_manager_v1_interface.name) == EQUAL) {
@@ -371,11 +377,10 @@ void monitor_setup(uint32_t registry_name, struct wl_output* output) {
 void monitor_cleanup(struct Monitor *monitor) {
     free(monitor->tags);
     free(monitor->title);
-    zdwl_ipc_output_v1_destroy(monitor->dwl_output);
+    zdwl_ipc_output_v2_destroy(monitor->dwl_output);
 }
 
 void setup(void) {
-    wl_array_init(&tags);
     wl_array_init(&layouts);
     wl_list_init(&monitors);
 
@@ -399,8 +404,8 @@ void setup(void) {
         /*
          * We must initialize tags before we add dwl_output listener.
          */
-        struct Tag *monitor_tags = ecalloc(WL_ARRAY_LENGHT(&tags, char**), sizeof(*monitor_tags));
-        for (int i = 0; i < WL_ARRAY_LENGHT(&tags, char**); i++) {
+        struct Tag *monitor_tags = ecalloc(tagcount, sizeof(*monitor_tags));
+        for (int i = 0; i < tagcount; i++) {
             struct Tag *tag = &monitor_tags[i];
             tag->state = 0;
             tag->is_focused = 0;
@@ -408,8 +413,8 @@ void setup(void) {
         }
         monitor->tags = monitor_tags;
 
-        monitor->dwl_output = zdwl_ipc_manager_v1_get_output(dwl_manager, monitor->wl_output);
-        zdwl_ipc_output_v1_add_listener(monitor->dwl_output, &dwl_output_listener, monitor);
+        monitor->dwl_output = zdwl_ipc_manager_v2_get_output(dwl_manager, monitor->wl_output);
+        zdwl_ipc_output_v2_add_listener(monitor->dwl_output, &dwl_output_listener, monitor);
     }
 
     wl_display_roundtrip(display);
@@ -427,7 +432,7 @@ int main(int argc, char *argv[]) {
     setup();
 
     while(opt != -1)  {
-        opt = getopt(argc, argv, "vho:Ot:TeEaAsilLfcpn");
+        opt = getopt(argc, argv, "vho:Ot:TeEaAsSilLfcpn");
         switch (opt) {
             case 'v':
                 printf("dwl-state %f\n", VERSION);
@@ -448,7 +453,7 @@ int main(int argc, char *argv[]) {
                     noun |= Tags;
 
                 int tag = atoi(optarg);
-                if (!tag || tag < 1 || tag > WL_ARRAY_LENGHT(&tags, char**))
+                if (!tag || tag < 1 || tag > tagcount)
                     die("%s is not a valid number or index", optarg);
                 tagmask |= 1 << (tag-1);
 
@@ -494,6 +499,9 @@ int main(int argc, char *argv[]) {
             case 'n':
                 verb |= No_Labels;
                 break;
+            case 'S':
+                verb |= Layout_Symbol;
+                break;
             case ':':
                 goto usage;
             case '?':
@@ -513,7 +521,10 @@ int main(int argc, char *argv[]) {
     }
 
     if (noun & Tags && !verb) {
-        print_wl_array(&tags);
+        for (int i = 0; i < tagcount; i++)
+            printf("%d ", i+1);
+        printf("\n");
+        fflush(stdout);
         goto done;
     }
 
@@ -529,7 +540,7 @@ int main(int argc, char *argv[]) {
     }
 
     if ((!(noun & Outputs) && !wanted_monitor) || noun & Active_Output) {
-        if (verb & State || verb & Appid || verb & Title || verb & Layout)
+        if (verb & State || verb & Appid || verb & Title || verb & Layout || verb & Layout_Symbol)
             noun |= Outputs;
 
         struct Monitor *active_monitor = get_active_monitor();
@@ -572,6 +583,7 @@ usage:
     printf("-p               -- Get the appid of an output, if none specified get the active output.\n");
     printf("-i               -- Get the title of an output, if none specified get the active output.\n");
     printf("-l               -- Get the current layout of an output, if none specified get the active output.\n");
+    printf("-S               -- Print the layout symbol of the output.\n");
     printf("--   Tags Verbs  --\n");
     printf("-f               -- Get the focused state of a specifed tag, if none specified get the active tag.\n");
     printf("-c               -- Get the client amount of a specified tag, if none specified get the active tag.\n");
@@ -590,14 +602,11 @@ void cleanup(void) {
     }
 
     char** ptr;
-    wl_array_for_each(ptr, &tags)
-        free(*ptr);
     wl_array_for_each(ptr, &layouts)
         free(*ptr);
-    wl_array_release(&tags);
     wl_array_release(&layouts);
 
-    zdwl_ipc_manager_v1_destroy(dwl_manager);
+    zdwl_ipc_manager_v2_destroy(dwl_manager);
     wl_display_disconnect(display);
 }
 

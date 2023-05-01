@@ -26,7 +26,7 @@ WAYLAND_PROTOCOLS = `$(PKG_CONFIG) --variable=pkgdatadir wayland-protocols`
 
 # Files
 FILES = $(SRCDIR)/dwl-state.c
-OBJS  = $(SRCDIR)/xdg-output-unstable-v1-protocol.o $(SRCDIR)/dwl-ipc-unstable-v1-protocol.o
+OBJS  = $(SRCDIR)/xdg-output-unstable-v1-protocol.o $(SRCDIR)/dwl-ipc-unstable-v2-protocol.o
 
 all: dwl-state
 dwl-state: $(FILES) $(OBJS)
@@ -41,12 +41,12 @@ $(SRCDIR)/xdg-output-unstable-v1-protocol.c:
 	$(WAYLAND_SCANNER) private-code \
 		$(WAYLAND_PROTOCOLS)/unstable/xdg-output/xdg-output-unstable-v1.xml $@
 
-$(SRCDIR)/dwl-ipc-unstable-v1-protocol.h:
+$(SRCDIR)/dwl-ipc-unstable-v2-protocol.h:
 	$(WAYLAND_SCANNER) client-header \
-		protocols/dwl-ipc-unstable-v1.xml $@
-$(SRCDIR)/dwl-ipc-unstable-v1-protocol.c:
+		protocols/dwl-ipc-unstable-v2.xml $@
+$(SRCDIR)/dwl-ipc-unstable-v2-protocol.c:
 	$(WAYLAND_SCANNER) private-code \
-		protocols/dwl-ipc-unstable-v1.xml $@
+		protocols/dwl-ipc-unstable-v2.xml $@
 
 clean:
 	rm -f dwl-state src/*.o src/*-protocol.*
