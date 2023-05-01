@@ -14,3 +14,6 @@ Use `make` to compile, and `make install` to install, uninstall with `make unins
 There are nouns and verbs. Nouns determine what object your verbs will act on. Verbs determine what information you will get from the noun you choose.
 By default if no nouns are provided but verbs are provided the active output and active tag are used (of course depending on the verb). If you don't want
 any labels (the name of the noun) in the output use the `-n` flag.
+
+## Ipc Protocol
+Make sure if your using the version 2 of the protocol. To use the [ipc-v2](https://github.com/MadcowOG/dwl-state/tree/ipc-v2) branch.
