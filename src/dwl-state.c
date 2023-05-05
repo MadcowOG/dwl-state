@@ -178,7 +178,7 @@ void monitor_output(struct Monitor *monitor, int tagmask) {
 
     if ((noun & Outputs || noun & Active_Output || noun & Noun_All) && (verb & State || verb & Appid || verb & Title || verb & Layout || verb & Verb_All)) {
         if (!(verb & No_Labels))
-            printf("%s: ", monitor->xdg_name);
+            printf("%s ", monitor->xdg_name);
 
         if (verb & State || verb & Verb_All) {
             printf("%s", monitor->active ? "Active" : "InActive");
@@ -222,7 +222,7 @@ void monitor_output(struct Monitor *monitor, int tagmask) {
             continue;
 
         if (!(verb & No_Labels))
-            printf("%s: %d: ", monitor->xdg_name, i+1);
+            printf("%s %d ", monitor->xdg_name, i+1);
 
         struct Tag *tag = &monitor->tags[i];
 
@@ -545,6 +545,20 @@ int main(int argc, char *argv[]) {
     if (noun & Tags && !verb) {
         print_wl_array(&tags);
         goto done;
+    }
+
+    if (noun & Active_Output && !verb) {
+        printf("%s", get_active_monitor()->xdg_name);
+    }
+
+    if (noun & Active_Tag && !verb) {
+        struct Monitor *active_monitor = get_active_monitor();
+        struct Tag *tag;
+        for (int i = 0; i < WL_ARRAY_LENGHT(&tags, char**); i++) {
+            tag = &active_monitor->tags[i];
+            if (tag->is_focused)
+                printf("%s %d", monitor->xdg_name, i+1);
+        }
     }
 
     if ((noun & Tags || noun & Active_Tag) && !(verb & Focused || verb & Clients || verb & Verb_All))
