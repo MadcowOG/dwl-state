@@ -21,6 +21,10 @@
 #define POLLFDS 1
 #define WL_ARRAY_LENGHT(array, type) ((array)->size/sizeof(type))
 #define WL_ARRAY_AT(array, type, index) ((type)(array)->data+index)
+#define CHECK_VERB_COUNT if (count > 1) { \
+                            printf(" "); \
+                            count--; \
+                         }
 
 /* Structures */
 struct Tag {
@@ -78,6 +82,7 @@ enum Verb {
 static void cleanup(void);
 static void check_global(void* global, const char *msg);
 static int  check_for_framed(char *name);
+static int  check_for_multiple_verbs(int verbs);
 static void die(const char* fmt, ...);
 static void dwl_manager_tag(void *data, struct zdwl_ipc_manager_v2 *zdwl_ipc_manager_v2, uint32_t tagcount);
 static void dwl_manager_layout(void *data, struct zdwl_ipc_manager_v2 *zdwl_ipc_manager_v2, const char *name);
@@ -170,6 +175,7 @@ struct Monitor *get_active_monitor(void) {
 
 void monitor_output(struct Monitor *monitor, int tagmask) {
     int i;
+    int count = check_for_multiple_verbs(verb);
 
     if (!verb)
         return;
@@ -178,22 +184,30 @@ void monitor_output(struct Monitor *monitor, int tagmask) {
         if (!(verb & No_Labels))
             printf("%s: ", monitor->xdg_name);
 
-        if (verb & State || verb & Verb_All)
-            printf("%s", monitor->active ? "Active " : "InActive ");
+        if (verb & State || verb & Verb_All) {
+            printf("%s", monitor->active ? "Active" : "InActive");
+            CHECK_VERB_COUNT
+        }
 
         if (verb & Title || verb & Verb_All) {
-            printf("'%s' ", monitor->title);
+            printf("'%s'", monitor->title);
+            CHECK_VERB_COUNT
         }
 
         if (verb & Appid || verb & Verb_All) {
-            printf("'%s' ", monitor->appid);
+            printf("'%s'", monitor->appid);
+            CHECK_VERB_COUNT
         }
 
-        if (verb & Layout || verb & Verb_All)
-            printf("%s ", *WL_ARRAY_AT(&layouts, char**, monitor->layout_index));
+        if (verb & Layout || verb & Verb_All) {
+            printf("%s", *WL_ARRAY_AT(&layouts, char**, monitor->layout_index));
+            CHECK_VERB_COUNT
+        }
 
-        if (verb & Layout_Symbol || verb & Verb_All)
-            printf("%s ", monitor->layout_symbol);
+        if (verb & Layout_Symbol || verb & Verb_All) {
+            printf("%s", monitor->layout_symbol);
+            CHECK_VERB_COUNT
+        }
 
         printf("\n");
     }
@@ -221,16 +235,22 @@ void monitor_output(struct Monitor *monitor, int tagmask) {
 
         struct Tag *tag = &monitor->tags[i];
 
-        if (verb & State || verb & Verb_All)
+        if (verb & State || verb & Verb_All) {
             printf("%s %s",
                     tag->state & ZDWL_IPC_OUTPUT_V2_TAG_STATE_ACTIVE ? "Active" : "InActive",
-                    tag->state & ZDWL_IPC_OUTPUT_V2_TAG_STATE_URGENT ? "Urgent "  : "");
+                    tag->state & ZDWL_IPC_OUTPUT_V2_TAG_STATE_URGENT ? "Urgent"  : "");
+            CHECK_VERB_COUNT
+        }
 
-        if (verb & Focused || verb & Verb_All)
+        if (verb & Focused || verb & Verb_All) {
             printf("%d ", tag->is_focused);
+            CHECK_VERB_COUNT
+        }
 
-        if (verb & Clients || verb & Verb_All)
+        if (verb & Clients || verb & Verb_All) {
             printf("%d", tag->client_amount);
+            CHECK_VERB_COUNT
+        }
 
         printf("\n");
     }
@@ -255,6 +275,18 @@ int check_for_framed(char *name) {
     }
 
     return framed;
+}
+
+int check_for_multiple_verbs(int verbs) {
+    int count = 0;
+    if (verbs & No_Labels)
+        verbs ^= No_Labels;
+    while (verbs) {
+        if (verbs & 1)
+            count++;
+        verbs >>= 1;
+    }
+    return count;
 }
 
 void print_wl_array(struct wl_array *array) {
