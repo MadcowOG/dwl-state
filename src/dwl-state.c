@@ -554,7 +554,7 @@ int main(int argc, char *argv[]) {
     if (noun & Active_Tag && !verb) {
         struct Monitor *active_monitor = get_active_monitor();
         struct Tag *tag;
-        for (int i = 0; i < tagcount; i++) {
+        for (int i = 0; i < WL_ARRAY_LENGHT(&tags, char**); i++) {
             tag = &active_monitor->tags[i];
             if (tag->is_focused)
                 printf("%s %d", active_monitor->xdg_name, i+1);
