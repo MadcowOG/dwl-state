@@ -467,7 +467,7 @@ int main(int argc, char *argv[]) {
         opt = getopt(argc, argv, "vho:Ot:TeEaAsSilLfcpn");
         switch (opt) {
             case 'v':
-                printf("dwl-state %f\n", VERSION);
+                printf("dwl-state %.1f\n", VERSION);
                 goto done;
             case 'h':
                 goto usage;
@@ -567,10 +567,10 @@ int main(int argc, char *argv[]) {
     if (noun & Active_Tag && !verb) {
         struct Monitor *active_monitor = get_active_monitor();
         struct Tag *tag;
-        for (int i = 0; i < WL_ARRAY_LENGHT(&tags, char**); i++) {
+        for (int i = 0; i < tagcount; i++) {
             tag = &active_monitor->tags[i];
             if (tag->is_focused)
-                printf("%s %d", monitor->xdg_name, i+1);
+                printf("%s %d", active_monitor->xdg_name, i+1);
         }
     }
 
