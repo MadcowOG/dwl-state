@@ -53,7 +53,7 @@ clean:
 
 dist: clean
 	mkdir -p dwl-state-$(VERSION)
-	cp -R LICENSE Makefile README.md src protocols \
+	cp -R LICENSE Makefile README.md dwl-state.1 src protocols \
 		dwl-state-$(VERSION)
 	tar -caf dwl-state-$(VERSION).tar.gz dwl-state-$(VERSION)
 	rm -rf dwl-state-$(VERSION)
