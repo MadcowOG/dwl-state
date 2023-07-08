@@ -60,10 +60,10 @@ dist: clean
 
 install: dwl-state
 	mkdir -p $(PREFIX)/bin
-	cp -f dwl $(PREFIX)/bin
+	cp -f dwl-state $(PREFIX)/bin
 	chmod 755 $(PREFIX)/bin/dwl-state
 	mkdir -p $(MANDIR)/man1
-	cp -f dwl.1 $(MANDIR)/man1
+	cp -f dwl-state.1 $(MANDIR)/man1
 	chmod 644 $(MANDIR)/man1/dwl-state.1
 
 uninstall:
